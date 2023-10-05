@@ -51,7 +51,7 @@ def makedirs(path):
 def try_copy(src, dst):
     try:
         if os.path.isdir(dst):
-            dstfile = dst + "/" + os.path.basename(src)
+            dstfile = f"{dst}/{os.path.basename(src)}"
             if os.path.lexists(dstfile):
                 os.remove(dstfile)
         elif os.path.lexists(dst):
@@ -91,7 +91,7 @@ def set_dir_casefold_bit(dir_path):
 
 class Proton:
     def __init__(self, base_dir):
-        self.base_dir = base_dir + "/"
+        self.base_dir = f"{base_dir}/"
         self.dist_dir = self.path("dist/")
         self.bin_dir = self.path("dist/bin/")
         self.lib_dir = self.path("dist/lib/")
@@ -100,9 +100,11 @@ class Proton:
         self.version_file = self.path("version")
         self.default_pfx_dir = self.path("dist/share/default_pfx/")
         self.user_settings_file = self.path("user_settings.py")
-        self.wine_bin = self.bin_dir + "wine"
-        self.wineserver_bin = self.bin_dir + "wineserver"
-        self.winetricks_bin = self.base_dir + "/dist/share/winetricks/winetricks_runner"
+        self.wine_bin = f"{self.bin_dir}wine"
+        self.wineserver_bin = f"{self.bin_dir}wineserver"
+        self.winetricks_bin = (
+            f"{self.base_dir}/dist/share/winetricks/winetricks_runner"
+        )
         self.dist_lock = FileLock(self.path("dist.lock"), timeout=-1)
 
     def path(self, d):
@@ -111,15 +113,18 @@ class Proton:
     def extract_tarball(self):
         with self.dist_lock:
             if not os.path.exists(self.dist_dir) or \
-                    not os.path.exists(self.path("dist/version")) or \
-                    not filecmp.cmp(self.version_file, self.path("dist/version")):
+                        not os.path.exists(self.path("dist/version")) or \
+                        not filecmp.cmp(self.version_file, self.path("dist/version")):
                 if os.path.exists(self.dist_dir):
                     shutil.rmtree(self.dist_dir)
-                tar = None
-                for sf in ["", ".xz", ".bz2", ".gz"]:
-                    if os.path.exists(self.path("proton_dist.tar" + sf)):
-                        tar = tarfile.open(self.path("proton_dist.tar" + sf), mode="r:*")
-                        break
+                tar = next(
+                    (
+                        tarfile.open(self.path(f"proton_dist.tar{sf}"), mode="r:*")
+                        for sf in ["", ".xz", ".bz2", ".gz"]
+                        if os.path.exists(self.path(f"proton_dist.tar{sf}"))
+                    ),
+                    None,
+                )
                 if not tar:
                     log("No proton_dist tarball??")
                     sys.exit(1)
@@ -139,7 +144,7 @@ class Proton:
 
 class CompatData:
     def __init__(self, compatdata):
-        self.base_dir = compatdata + "/"
+        self.base_dir = f"{compatdata}/"
         self.prefix_dir = self.path("pfx/")
         self.version_file = self.path("version")
         self.tracked_files_file = self.path("tracked_files")
@@ -176,12 +181,14 @@ class CompatData:
         if old_ver == CURRENT_PREFIX_VERSION:
             return
 
-        log("Upgrading prefix from " + str(old_ver) + " to " + CURRENT_PREFIX_VERSION + " (" + self.base_dir + ")")
+        log(
+            f"Upgrading prefix from {str(old_ver)} to {CURRENT_PREFIX_VERSION} ({self.base_dir})"
+        )
 
         if old_ver is None:
             return
 
-        if not '-' in old_ver:
+        if '-' not in old_ver:
             #How can this happen??
             log("Prefix has an invalid version?! You may want to back up user files and delete this prefix.")
             #If it does, just let the Wine upgrade happen and hope it works...
@@ -194,8 +201,8 @@ class CompatData:
             new_proton_maj, new_proton_min = new_proton_ver.split('.')
 
             if int(new_proton_maj) < int(old_proton_maj) or \
-                    (int(new_proton_maj) == int(old_proton_maj) and \
-                     int(new_proton_min) < int(old_proton_min)):
+                        (int(new_proton_maj) == int(old_proton_maj) and \
+                         int(new_proton_min) < int(old_proton_min)):
                 log("Removing newer prefix")
                 if old_proton_ver == "3.7" and not os.path.exists(self.tracked_files_file):
                     #proton 3.7 did not generate tracked_files, so copy it into place first
@@ -204,25 +211,30 @@ class CompatData:
                 return
 
             if old_proton_ver == "3.7" and old_prefix_ver == "1":
-                if not os.path.exists(self.prefix_dir + "/drive_c/windows/syswow64/kernel32.dll"):
+                if not os.path.exists(
+                    f"{self.prefix_dir}/drive_c/windows/syswow64/kernel32.dll"
+                ):
                     #shipped a busted 64-bit-only installation on 20180822. detect and wipe clean
                     log("Detected broken 64-bit-only installation, re-creating prefix.")
                     shutil.rmtree(self.prefix_dir)
                     return
 
             #replace broken .NET installations with wine-mono support
-            if os.path.exists(self.prefix_dir + "/drive_c/windows/Microsoft.NET/NETFXRepair.exe") and \
-                    file_is_wine_fake_dll(self.prefix_dir + "/drive_c/windows/system32/mscoree.dll"):
+            if os.path.exists(
+                f"{self.prefix_dir}/drive_c/windows/Microsoft.NET/NETFXRepair.exe"
+            ) and file_is_wine_fake_dll(
+                f"{self.prefix_dir}/drive_c/windows/system32/mscoree.dll"
+            ):
                 log("Broken .NET installation detected, switching to wine-mono.")
                 #deleting this directory allows wine-mono to work
-                shutil.rmtree(self.prefix_dir + "/drive_c/windows/Microsoft.NET")
+                shutil.rmtree(f"{self.prefix_dir}/drive_c/windows/Microsoft.NET")
 
             #prior to prefix version 4.11-2, all controllers were xbox controllers. wipe out the old registry entries.
             if (int(old_proton_maj) < 4 or (int(old_proton_maj) == 4 and int(old_proton_min) == 11)) and \
-                    int(old_prefix_ver) < 2:
+                        int(old_prefix_ver) < 2:
                 log("Removing old xinput registry entries.")
-                with open(self.prefix_dir + "system.reg", "r") as reg_in:
-                    with open(self.prefix_dir + "system.reg.new", "w") as reg_out:
+                with open(f"{self.prefix_dir}system.reg", "r") as reg_in:
+                    with open(f"{self.prefix_dir}system.reg.new", "w") as reg_out:
                         for line in reg_in:
                             if line[0] == '[' and "CurrentControlSet" in line and "IG_" in line:
                                 if "DeviceClasses" in line:
@@ -232,17 +244,13 @@ class CompatData:
                             else:
                                 reg_out.write(line)
                 try:
-                    os.rename(self.prefix_dir + "system.reg", self.prefix_dir + "system.reg.old")
+                    os.rename(f"{self.prefix_dir}system.reg", f"{self.prefix_dir}system.reg.old")
                 except OSError:
-                    os.remove(self.prefix_dir + "system.reg")
-                    pass
-
+                    os.remove(f"{self.prefix_dir}system.reg")
                 try:
-                    os.rename(self.prefix_dir + "system.reg.new", self.prefix_dir + "system.reg")
+                    os.rename(f"{self.prefix_dir}system.reg.new", f"{self.prefix_dir}system.reg")
                 except OSError:
-                    log("Unable to write new registry file to " + self.prefix_dir + "system.reg")
-                    pass
-
+                    log(f"Unable to write new registry file to {self.prefix_dir}system.reg")
         except ValueError:
             log("Prefix has an invalid version?! You may want to back up user files and delete this prefix.")
             #Just let the Wine upgrade happen and hope it works...
@@ -253,7 +261,7 @@ class CompatData:
             for src_dir, dirs, files in os.walk(g_proton.default_pfx_dir):
                 rel_dir = src_dir.replace(g_proton.default_pfx_dir, "", 1).lstrip('/')
                 if len(rel_dir) > 0:
-                    rel_dir = rel_dir + "/"
+                    rel_dir = f"{rel_dir}/"
                 dst_dir = src_dir.replace(g_proton.default_pfx_dir, self.prefix_dir, 1)
                 if not os.path.exists(dst_dir):
                     os.makedirs(dst_dir)
@@ -278,7 +286,7 @@ class CompatData:
             ( "LiberationMono-Regular.ttf", "cour.ttf" ),
         ]
 
-        windowsfonts = self.prefix_dir + "/drive_c/windows/Fonts"
+        windowsfonts = f"{self.prefix_dir}/drive_c/windows/Fonts"
         makedirs(windowsfonts)
         for p in fontsmap:
             lname = os.path.join(windowsfonts, p[1])
